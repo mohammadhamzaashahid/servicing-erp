@@ -1,261 +1,225 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertCircle, RefreshCw, Search } from "lucide-react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  AlertCircle,
+  Printer,
+  RefreshCw,
+  Search,
+  WalletCards,
+} from "lucide-react";
 import Button from "@/components/ui/Button";
-import DataTable from "@/components/ui/DataTable";
+import Drawer from "@/components/ui/Drawer";
+import Input from "@/components/ui/Input";
+import LookupSelect from "@/components/ui/LookupSelect";
+import LoadingState from "@/components/ui/LoadingState";
+import EmptyState from "@/components/ui/EmptyState";
 import Select from "@/components/ui/Select";
-import Badge from "@/components/ui/Badge";
-import { useLedgerEntries } from "@/modules/ledgers/ledger.hooks";
-import { formatDate, formatMoney } from "@/lib/format";
-
-function getPartyTypeBadge(type) {
-  if (type === "VENDOR") {
-    return <Badge variant="yellow">Vendor</Badge>;
-  }
-
-  if (type === "CUSTOMER") {
-    return <Badge variant="green">Customer</Badge>;
-  }
-
-  return <Badge variant="slate">{type || "-"}</Badge>;
-}
+import Textarea from "@/components/ui/Textarea";
+import { useCustomers } from "@/modules/customers/customer.hooks";
+import {
+  useCustomerStatement,
+  useRecordCustomerPayment,
+} from "@/modules/ledgers/ledger.hooks";
+import { formatDate, formatMoney, formatQty } from "@/lib/format";
 
 function formatSourceType(type) {
   const labels = {
     OPENING_BALANCE: "Opening Balance",
-    MATERIAL_RECEIPT: "Material Receipt",
-    PRODUCTION_BATCH: "Production Batch",
     SALES_INVOICE: "Sales Invoice",
-    PAYMENT: "Payment",
-    STOCK_ADJUSTMENT: "Stock Adjustment",
+    PAYMENT: "Payment Received",
+    STOCK_ADJUSTMENT: "Adjustment",
   };
 
-  return labels[type] || type || "-";
+  return labels[type] || type || "Transaction";
 }
 
-function getLedgerDebit(row) {
-  if (row.entryType === "DEBIT") {
-    return Number(row.amount || 0);
-  }
-
-  return 0;
+function formatBalance(value, side) {
+  const amount = Math.abs(Number(value || 0));
+  return `${formatMoney(amount)} ${amount > 0 ? side : ""}`.trim();
 }
 
-function getLedgerCredit(row) {
-  if (row.entryType === "CREDIT") {
-    return Number(row.amount || 0);
-  }
+function formatRunningBalance(value) {
+  const balance = Number(value || 0);
+  const formatted = formatMoney(Math.abs(balance));
 
-  return 0;
+  return balance < 0 ? `(${formatted})` : formatted;
 }
 
-export default function LedgersPage() {
-  const [partyType, setPartyType] = useState("");
-  const [sourceType, setSourceType] = useState("");
-  const [appliedPartyType, setAppliedPartyType] = useState("");
-  const [appliedSourceType, setAppliedSourceType] = useState("");
+function formatLedgerDate(value) {
+  if (!value) return "-";
 
-  const queryParams = useMemo(
-    () => ({
-      page: 1,
-      limit: 100,
-      partyType: appliedPartyType,
-      sourceType: appliedSourceType,
-    }),
-    [appliedPartyType, appliedSourceType]
+  const date = new Date(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = String(date.getFullYear()).slice(-2);
+
+  return `${day}.${month}.${year}`;
+}
+
+function SummaryCard({ label, value, helper }) {
+  return (
+    <div className="border border-slate-300 bg-white p-3 text-slate-950">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+      {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
+    </div>
   );
+}
 
-  const ledgerQuery = useLedgerEntries(queryParams);
+function CustomerLedgerPage() {
+  const searchParams = useSearchParams();
+  const linkedCustomerId = searchParams.get("customerId") || "";
+  const [customerId, setCustomerId] = useState(linkedCustomerId);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState({
+    customerId: linkedCustomerId,
+    from: "",
+    to: "",
+  });
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const [paymentForm, setPaymentForm] = useState({
+    amount: "",
+    paymentDate: new Date().toLocaleDateString("en-CA"),
+    mode: "CASH",
+    remarks: "",
+  });
 
-  const rows = ledgerQuery.data?.data || [];
-  const pagination = ledgerQuery.data?.pagination;
-
-  const totals = useMemo(() => {
-    return rows.reduce(
-      (sum, row) => ({
-        debit: sum.debit + getLedgerDebit(row),
-        credit: sum.credit + getLedgerCredit(row),
-      }),
-      {
-        debit: 0,
-        credit: 0,
-      }
-    );
-  }, [rows]);
+  const customersQuery = useCustomers({ page: 1, limit: 100 });
+  const customers = customersQuery.data?.data || [];
+  const statementParams = useMemo(
+    () => ({ from: appliedFilters.from, to: appliedFilters.to }),
+    [appliedFilters.from, appliedFilters.to]
+  );
+  const statementQuery = useCustomerStatement(
+    appliedFilters.customerId,
+    statementParams
+  );
+  const paymentMutation = useRecordCustomerPayment();
+  const statement = statementQuery.data;
+  const summary = statement?.summary;
+  const rows = statement?.rows || [];
 
   const handleSubmit = (event) => {
     event.preventDefault();
-
-    setAppliedPartyType(partyType);
-    setAppliedSourceType(sourceType);
+    setAppliedFilters({ customerId, from, to });
   };
 
   const handleReset = () => {
-    setPartyType("");
-    setSourceType("");
-    setAppliedPartyType("");
-    setAppliedSourceType("");
+    setCustomerId("");
+    setFrom("");
+    setTo("");
+    setAppliedFilters({ customerId: "", from: "", to: "" });
+    window.history.replaceState(null, "", "/dashboard/ledgers");
   };
 
-  const columns = [
-    {
-      key: "transactionDate",
-      header: "Date",
-      render: (row) => formatDate(row.transactionDate),
-    },
-    {
-      key: "partyType",
-      header: "Party Type",
-      render: (row) => getPartyTypeBadge(row.partyType),
-    },
-    {
-      key: "party",
-      header: "Party",
-      render: (row) => {
-        const party = row.vendor || row.customer;
+  const openPaymentDrawer = () => {
+    setPaymentError("");
+    setPaymentForm({
+      amount:
+        Number(statement?.customer?.currentBalance) > 0
+          ? String(statement.customer.currentBalance)
+          : "",
+      paymentDate: new Date().toLocaleDateString("en-CA"),
+      mode: "CASH",
+      remarks: "",
+    });
+    setPaymentOpen(true);
+  };
 
-        return (
-          <div>
-            <p className="font-medium text-slate-900">{party?.name || "-"}</p>
-            <p className="text-xs text-slate-500">
-              {party?.vendorCode || party?.customerCode || ""}
-            </p>
-          </div>
-        );
-      },
-    },
-    {
-      key: "description",
-      header: "Description",
-      render: (row) => (
-        <span className="max-w-md text-slate-700">
-          {row.description || "-"}
-        </span>
-      ),
-    },
-    {
-      key: "debit",
-      header: "Debit",
-      render: (row) => {
-        const debit = getLedgerDebit(row);
+  const handlePaymentSubmit = async (event) => {
+    event.preventDefault();
+    setPaymentError("");
 
-        return debit > 0 ? (
-          <span className="font-semibold text-slate-950">
-            {formatMoney(debit)}
-          </span>
-        ) : (
-          <span className="text-slate-400">-</span>
-        );
-      },
-    },
-    {
-      key: "credit",
-      header: "Credit",
-      render: (row) => {
-        const credit = getLedgerCredit(row);
+    try {
+      await paymentMutation.mutateAsync({
+        customerId: statement.customer.id,
+        payload: {
+          amount: Number(paymentForm.amount),
+          paymentDate: paymentForm.paymentDate,
+          mode: paymentForm.mode,
+          remarks: paymentForm.remarks.trim() || null,
+        },
+      });
+      setPaymentOpen(false);
+    } catch (error) {
+      setPaymentError(error.message || "Unable to record customer payment");
+    }
+  };
 
-        return credit > 0 ? (
-          <span className="font-semibold text-slate-950">
-            {formatMoney(credit)}
-          </span>
-        ) : (
-          <span className="text-slate-400">-</span>
-        );
-      },
-    },
-    {
-      key: "entryType",
-      header: "Entry",
-      render: (row) => {
-        if (row.entryType === "DEBIT") {
-          return <Badge variant="green">Debit</Badge>;
-        }
-
-        if (row.entryType === "CREDIT") {
-          return <Badge variant="yellow">Credit</Badge>;
-        }
-
-        return <Badge variant="slate">{row.entryType || "-"}</Badge>;
-      },
-    },
-    {
-      key: "sourceType",
-      header: "Source",
-      render: (row) => (
-        <div>
-          <p className="font-medium text-slate-900">
-            {formatSourceType(row.sourceType)}
-          </p>
-          <p className="text-xs text-slate-500">{row.sourceId || ""}</p>
-        </div>
-      ),
-    },
-  ];
+  const closingSide = summary?.balanceSide || "DR";
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="text-sm font-medium text-slate-500">Accounts</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-          Ledger Entries
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-          Track vendor payable and customer receivable ledger entries generated
-          from opening balances, material receiving, sales invoices, and future
-          payment transactions.
-        </p>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Visible Debit Total</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">
-            {formatMoney(totals.debit)}
+    <div className="space-y-5 print:space-y-3 print:bg-white">
+      <section className="flex flex-col justify-between gap-4 border border-slate-300 bg-white p-4 print:border-0 print:border-b-2 print:border-slate-950 print:p-0 print:pb-3 md:flex-row md:items-start">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Accounts Receivable</p>
+          <h1 className="mt-1 text-xl font-semibold text-slate-950">
+            Customer Ledger
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 print:hidden">
+            Customer transactions, payments, and running balance.
           </p>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Visible Credit Total</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">
-            {formatMoney(totals.credit)}
-          </p>
+        <div className="flex flex-wrap gap-2 print:hidden">
+          <Button onClick={openPaymentDrawer} disabled={!statement}>
+            <WalletCards size={16} />
+            Record Payment
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => window.print()}
+            disabled={!statement}
+          >
+            <Printer size={16} />
+            Print Ledger
+          </Button>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="border border-slate-300 bg-white p-4 print:hidden">
         <form
           onSubmit={handleSubmit}
-          className="grid gap-3 md:grid-cols-[220px_260px_auto]"
+          className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_180px_auto]"
         >
-          <Select
-            label="Party Type"
-            value={partyType}
-            onChange={(event) => setPartyType(event.target.value)}
-          >
-            <option value="">All Parties</option>
-            <option value="VENDOR">Vendors</option>
-            <option value="CUSTOMER">Customers</option>
-          </Select>
+          <LookupSelect
+            label="Customer"
+            value={customerId}
+            onChange={setCustomerId}
+            options={customers}
+            loading={customersQuery.isLoading}
+            placeholder="Select a customer"
+            getOptionLabel={(customer) => customer.name}
+            getOptionDescription={(customer) => customer.customerCode}
+          />
 
-          <Select
-            label="Source Type"
-            value={sourceType}
-            onChange={(event) => setSourceType(event.target.value)}
-          >
-            <option value="">All Sources</option>
-            <option value="OPENING_BALANCE">Opening Balance</option>
-            <option value="MATERIAL_RECEIPT">Material Receipt</option>
-            <option value="SALES_INVOICE">Sales Invoice</option>
-            <option value="PAYMENT">Payment</option>
-          </Select>
+          <Input
+            label="From date"
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(event) => setFrom(event.target.value)}
+          />
+
+          <Input
+            label="To date"
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(event) => setTo(event.target.value)}
+          />
 
           <div className="flex items-end gap-2">
-            <Button type="submit" variant="secondary">
+            <Button type="submit" disabled={!customerId}>
               <Search size={16} />
-              Apply
+              View Statement
             </Button>
-
             <Button type="button" variant="ghost" onClick={handleReset}>
               <RefreshCw size={16} />
               Reset
@@ -264,45 +228,315 @@ export default function LedgersPage() {
         </form>
       </section>
 
-      {ledgerQuery.isError ? (
-        <section className="rounded-3xl border border-red-200 bg-red-50 p-5 text-red-700">
+      {statementQuery.isError ? (
+        <section className="border border-red-300 bg-red-50 p-4 text-red-700 print:hidden">
           <div className="flex items-start gap-3">
             <AlertCircle size={20} className="mt-0.5" />
             <div>
-              <h2 className="text-sm font-semibold">
-                Unable to load ledger entries
-              </h2>
+              <h2 className="text-sm font-semibold">Unable to load statement</h2>
               <p className="mt-1 text-sm">
-                {ledgerQuery.error?.message || "Please try again."}
+                {statementQuery.error?.message || "Please try again."}
               </p>
             </div>
           </div>
         </section>
       ) : null}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <p className="text-sm text-slate-500">
-            {pagination
-              ? `${pagination.total} total ledger entr${
-                  pagination.total === 1 ? "y" : "ies"
-                }`
-              : "Ledger Entries"}
-          </p>
-
-          {ledgerQuery.isFetching && !ledgerQuery.isLoading ? (
-            <p className="text-xs text-slate-400">Refreshing...</p>
-          ) : null}
-        </div>
-
-        <DataTable
-          columns={columns}
-          rows={rows}
-          loading={ledgerQuery.isLoading}
-          emptyTitle="No ledger entries found"
-          emptyDescription="Ledger entries will appear after opening balances, material receiving, sales invoices, or payments."
+      {!appliedFilters.customerId ? (
+        <EmptyState
+          title="Select a customer"
+          description="Choose a customer and date range to prepare their ledger statement."
         />
-      </section>
+      ) : null}
+
+      {statementQuery.isLoading ? (
+        <LoadingState title="Preparing customer ledger..." />
+      ) : null}
+
+      {statement ? (
+        <>
+          <section className="grid gap-4 border border-slate-300 bg-white p-4 print:grid-cols-2 print:border-x-0 print:border-t-0 print:p-0 print:pb-3 lg:grid-cols-[1.2fr_1fr]">
+            <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Statement For
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-950">
+                  {statement.customer.name}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {statement.customer.customerCode}
+                  {statement.customer.phone ? ` · ${statement.customer.phone}` : ""}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {[statement.customer.address, statement.customer.city]
+                    .filter(Boolean)
+                    .join(", ") || "No address provided"}
+                </p>
+            </div>
+
+            <div className="lg:text-right">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Statement Period
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {appliedFilters.from ? formatDate(appliedFilters.from) : "Beginning"}
+                  {" — "}
+                  {appliedFilters.to ? formatDate(appliedFilters.to) : "Today"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Generated {formatDate(new Date())}
+                </p>
+            </div>
+          </section>
+
+          <section className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
+            <SummaryCard
+              label="Balance B/F"
+              value={formatBalance(
+                summary.openingBalance,
+                Number(summary.openingBalance) >= 0 ? "DR" : "CR"
+              )}
+              helper="Balance before this period"
+            />
+            <SummaryCard
+              label="Total Debit"
+              value={formatMoney(summary.totalDebit)}
+              helper="Invoices and charges"
+            />
+            <SummaryCard
+              label="Total Credit"
+              value={formatMoney(summary.totalCredit)}
+              helper="Payments and adjustments"
+            />
+            <SummaryCard
+              label={closingSide === "DR" ? "Closing Receivable" : "Customer Advance"}
+              value={formatBalance(summary.closingBalance, closingSide)}
+              helper={`${summary.outstandingInvoiceCount} outstanding invoice${
+                summary.outstandingInvoiceCount === 1 ? "" : "s"
+              }`}
+            />
+          </section>
+
+          <section className="overflow-hidden border border-slate-400 bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1050px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-950 text-left text-xs uppercase tracking-wide text-white print:bg-slate-100 print:text-slate-950">
+                    <th className="border-r border-slate-700 px-3 py-3 text-center font-semibold">#</th>
+                    <th className="border-r border-slate-700 px-3 py-3 font-semibold">Date</th>
+                    <th className="border-r border-slate-700 px-4 py-3 font-semibold">Particulars</th>
+                    <th className="border-r border-slate-700 px-3 py-3 text-right font-semibold">Qty</th>
+                    <th className="border-r border-slate-700 px-3 py-3 text-right font-semibold">Rate</th>
+                    <th className="border-r border-slate-700 px-4 py-3 text-right font-semibold">Debit</th>
+                    <th className="border-r border-slate-700 px-4 py-3 text-right font-semibold">Credit</th>
+                    <th className="px-4 py-3 text-right font-semibold">Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {Number(summary.openingBalance) !== 0 ? (
+                    <tr className="bg-slate-50 font-medium text-slate-700">
+                      <td className="border-r border-slate-200 px-3 py-3 text-center">-</td>
+                      <td className="border-r border-slate-200 px-3 py-3">{appliedFilters.from ? formatLedgerDate(appliedFilters.from) : "-"}</td>
+                      <td className="border-r border-slate-200 px-4 py-3">Balance brought forward</td>
+                      <td className="border-r border-slate-200 px-3 py-3 text-right">-</td>
+                      <td className="border-r border-slate-200 px-3 py-3 text-right">-</td>
+                      <td className="border-r border-slate-200 px-4 py-3 text-right">-</td>
+                      <td className="border-r border-slate-200 px-4 py-3 text-right">-</td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {formatRunningBalance(summary.openingBalance)}
+                      </td>
+                    </tr>
+                  ) : null}
+
+                  {rows.map((row, index) => (
+                    <tr key={row.id} className="align-top text-slate-700">
+                      <td className="border-r border-slate-200 px-3 py-3 text-center text-slate-500">
+                        {index + 1}
+                      </td>
+                      <td className="whitespace-nowrap border-r border-slate-200 px-3 py-3">
+                        {formatLedgerDate(row.transactionDate)}
+                      </td>
+                      <td className="border-r border-slate-200 px-4 py-3">
+                        <p className="font-medium text-slate-900">{row.description}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {row.reference || formatSourceType(row.sourceType)}
+                        </p>
+                      </td>
+                      <td className="border-r border-slate-200 px-3 py-3 text-right">
+                        {row.quantity ? formatQty(row.quantity) : "-"}
+                      </td>
+                      <td className="border-r border-slate-200 px-3 py-3 text-right">
+                        {row.rate ? formatMoney(row.rate) : "-"}
+                      </td>
+                      <td className="border-r border-slate-200 px-4 py-3 text-right font-medium text-slate-950">
+                        {Number(row.debit) > 0 ? formatMoney(row.debit) : "-"}
+                      </td>
+                      <td className="border-r border-slate-200 px-4 py-3 text-right font-medium text-slate-950">
+                        {Number(row.credit) > 0 ? formatMoney(row.credit) : "-"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-950">
+                        {formatRunningBalance(row.balance)}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {rows.length === 0 && Number(summary.openingBalance) === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                        No transactions found for this statement period.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-slate-950">
+                    <td colSpan={5} className="border-r border-slate-200 px-4 py-3 text-right uppercase tracking-wide">
+                      Period totals
+                    </td>
+                    <td className="border-r border-slate-200 px-4 py-3 text-right">{formatMoney(summary.totalDebit)}</td>
+                    <td className="border-r border-slate-200 px-4 py-3 text-right">{formatMoney(summary.totalCredit)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {formatRunningBalance(summary.closingBalance)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+
+          <section className="grid gap-0 sm:grid-cols-2 print:grid-cols-2">
+            <div className="border border-slate-300 bg-white p-3">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Outstanding invoice balance
+              </p>
+              <p className="mt-1 text-lg font-semibold text-slate-950">
+                {formatMoney(summary.outstandingInvoiceBalance)}
+              </p>
+            </div>
+            <div className="border border-slate-300 bg-white p-3 sm:text-right">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Current account receivable
+              </p>
+              <p className="mt-1 text-lg font-semibold text-slate-950">
+                {formatMoney(summary.currentBalance)} DR
+              </p>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      <Drawer
+        open={paymentOpen}
+        title="Record Customer Payment"
+        description={
+          statement
+            ? `Post a credit receipt for ${statement.customer.name}. It will be allocated to the oldest outstanding invoices first.`
+            : "Post a customer payment."
+        }
+        onClose={() => !paymentMutation.isPending && setPaymentOpen(false)}
+        width="max-w-xl"
+      >
+        <form onSubmit={handlePaymentSubmit} className="space-y-5">
+          {paymentError ? (
+            <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {paymentError}
+            </div>
+          ) : null}
+
+          <div className="border border-slate-300 bg-slate-50 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Current receivable
+            </p>
+            <p className="mt-1 text-xl font-semibold text-slate-950">
+              {formatMoney(statement?.customer?.currentBalance)} DR
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              The receipt will reduce this balance and update outstanding invoices.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Amount received"
+              type="number"
+              min="0.01"
+              max={statement?.customer?.currentBalance || undefined}
+              step="0.01"
+              value={paymentForm.amount}
+              onChange={(event) =>
+                setPaymentForm((current) => ({
+                  ...current,
+                  amount: event.target.value,
+                }))
+              }
+              required
+            />
+            <Input
+              label="Payment date"
+              type="date"
+              value={paymentForm.paymentDate}
+              onChange={(event) =>
+                setPaymentForm((current) => ({
+                  ...current,
+                  paymentDate: event.target.value,
+                }))
+              }
+              required
+            />
+          </div>
+
+          <Select
+            label="Payment mode"
+            value={paymentForm.mode}
+            onChange={(event) =>
+              setPaymentForm((current) => ({
+                ...current,
+                mode: event.target.value,
+              }))
+            }
+          >
+            <option value="CASH">Cash</option>
+            <option value="BANK">Bank</option>
+            <option value="OTHER">Other</option>
+          </Select>
+
+          <Textarea
+            label="Remarks"
+            rows={3}
+            value={paymentForm.remarks}
+            onChange={(event) =>
+              setPaymentForm((current) => ({
+                ...current,
+                remarks: event.target.value,
+              }))
+            }
+            placeholder="Receipt reference, bank details, or optional note..."
+          />
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setPaymentOpen(false)}
+              disabled={paymentMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={paymentMutation.isPending}>
+              <WalletCards size={16} />
+              {paymentMutation.isPending ? "Posting..." : "Post Payment"}
+            </Button>
+          </div>
+        </form>
+      </Drawer>
     </div>
+  );
+}
+
+export default function LedgersPage() {
+  return (
+    <Suspense fallback={<LoadingState title="Opening customer ledger..." />}>
+      <CustomerLedgerPage />
+    </Suspense>
   );
 }

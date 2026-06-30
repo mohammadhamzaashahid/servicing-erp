@@ -16,14 +16,35 @@ const createEmptyLine = () => ({
   discountAmount: "0",
 });
 
-const initialForm = {
-  customerId: "",
-  invoiceDate: "",
-  discountAmount: "0",
-  paidAmount: "0",
-  remarks: "",
-  lines: [createEmptyLine()],
-};
+function buildInitialForm(initialData) {
+  if (!initialData) {
+    return {
+      customerId: "",
+      invoiceDate: "",
+      discountAmount: "0",
+      paidAmount: "0",
+      remarks: "",
+      lines: [createEmptyLine()],
+    };
+  }
+
+  return {
+    customerId: initialData.customerId || "",
+    invoiceDate: initialData.invoiceDate
+      ? new Date(initialData.invoiceDate).toISOString().split("T")[0]
+      : "",
+    discountAmount: String(Number(initialData.discountAmount) || 0),
+    paidAmount: String(Number(initialData.paidAmount) || 0),
+    remarks: initialData.remarks || "",
+    lines: (initialData.lines || []).map((line) => ({
+      rowId: crypto.randomUUID(),
+      productId: line.productId || "",
+      quantity: String(Number(line.quantity) || 1),
+      salePrice: String(Number(line.salePrice) || 0),
+      discountAmount: String(Number(line.discountAmount) || 0),
+    })),
+  };
+}
 
 export default function SalesInvoiceForm({
   customers = [],
@@ -34,95 +55,77 @@ export default function SalesInvoiceForm({
   error,
   onSubmit,
   onCancel,
+  initialData = null,
 }) {
-  const [form, setForm] = useState(initialForm);
+  const isEditMode = Boolean(initialData);
+
+  const [form, setForm] = useState(() => buildInitialForm(initialData));
   const [formErrors, setFormErrors] = useState({});
 
   const selectedCustomer = useMemo(() => {
-    return customers.find((customer) => customer.id === form.customerId);
+    return customers.find((c) => c.id === form.customerId);
   }, [customers, form.customerId]);
 
   const productMap = useMemo(() => {
     const map = new Map();
-
-    products.forEach((product) => {
-      map.set(product.id, product);
-    });
-
+    products.forEach((p) => map.set(p.id, p));
     return map;
   }, [products]);
+
+  // In edit mode, original lines had their stock already deducted.
+  // Compute how much stock is "effectively available" per product
+  // (current stock + what this invoice already consumed).
+  const effectiveStockMap = useMemo(() => {
+    if (!isEditMode) return new Map();
+    const map = new Map();
+    (initialData?.lines || []).forEach((line) => {
+      const existing = map.get(line.productId) || 0;
+      map.set(line.productId, existing + Number(line.quantity || 0));
+    });
+    return map;
+  }, [isEditMode, initialData]);
 
   const totals = useMemo(() => {
     const subtotal = form.lines.reduce((sum, line) => {
       const quantity = Number(line.quantity || 0);
       const salePrice = Number(line.salePrice || 0);
       const lineDiscount = Number(line.discountAmount || 0);
-
-      if (
-        Number.isNaN(quantity) ||
-        Number.isNaN(salePrice) ||
-        Number.isNaN(lineDiscount)
-      ) {
-        return sum;
-      }
-
+      if (Number.isNaN(quantity) || Number.isNaN(salePrice) || Number.isNaN(lineDiscount)) return sum;
       return sum + Math.max(quantity * salePrice - lineDiscount, 0);
     }, 0);
 
     const invoiceDiscount = Number(form.discountAmount || 0);
     const paidAmount = Number(form.paidAmount || 0);
-
-    const safeInvoiceDiscount = Number.isNaN(invoiceDiscount)
-      ? 0
-      : invoiceDiscount;
-
-    const safePaidAmount = Number.isNaN(paidAmount) ? 0 : paidAmount;
-
-    const totalAmount = Math.max(subtotal - safeInvoiceDiscount, 0);
+    const safeDiscount = Number.isNaN(invoiceDiscount) ? 0 : invoiceDiscount;
+    const safePaid = Number.isNaN(paidAmount) ? 0 : paidAmount;
+    const totalAmount = Math.max(subtotal - safeDiscount, 0);
 
     return {
       subtotal,
-      discountAmount: safeInvoiceDiscount,
+      discountAmount: safeDiscount,
       totalAmount,
-      paidAmount: safePaidAmount,
-      balanceAmount: Math.max(totalAmount - safePaidAmount, 0),
+      paidAmount: safePaid,
+      balanceAmount: Math.max(totalAmount - safePaid, 0),
     };
   }, [form.lines, form.discountAmount, form.paidAmount]);
 
   const updateField = (field, value) => {
-    setForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-
-    setFormErrors((prev) => ({
-      ...prev,
-      [field]: "",
-    }));
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setFormErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const updateLine = (rowId, field, value) => {
     setForm((prev) => ({
       ...prev,
       lines: prev.lines.map((line) =>
-        line.rowId === rowId
-          ? {
-              ...line,
-              [field]: value,
-            }
-          : line
+        line.rowId === rowId ? { ...line, [field]: value } : line
       ),
     }));
-
-    setFormErrors((prev) => ({
-      ...prev,
-      lines: "",
-    }));
+    setFormErrors((prev) => ({ ...prev, lines: "" }));
   };
 
   const handleProductChange = (rowId, productId) => {
     const product = productMap.get(productId);
-
     setForm((prev) => ({
       ...prev,
       lines: prev.lines.map((line) =>
@@ -130,53 +133,40 @@ export default function SalesInvoiceForm({
           ? {
               ...line,
               productId,
-              salePrice: product
-                ? String(product.standardPrice ?? 0)
-                : line.salePrice,
+              salePrice: product ? String(product.standardPrice ?? 0) : line.salePrice,
             }
           : line
       ),
     }));
-
-    setFormErrors((prev) => ({
-      ...prev,
-      lines: "",
-    }));
+    setFormErrors((prev) => ({ ...prev, lines: "" }));
   };
 
   const addLine = () => {
-    setForm((prev) => ({
-      ...prev,
-      lines: [...prev.lines, createEmptyLine()],
-    }));
-
-    setFormErrors((prev) => ({
-      ...prev,
-      lines: "",
-    }));
+    setForm((prev) => ({ ...prev, lines: [...prev.lines, createEmptyLine()] }));
+    setFormErrors((prev) => ({ ...prev, lines: "" }));
   };
 
   const removeLine = (rowId) => {
     setForm((prev) => {
       if (prev.lines.length === 1) return prev;
-
-      return {
-        ...prev,
-        lines: prev.lines.filter((line) => line.rowId !== rowId),
-      };
+      return { ...prev, lines: prev.lines.filter((l) => l.rowId !== rowId) };
     });
+  };
+
+  const getAvailableStock = (productId) => {
+    const product = productMap.get(productId);
+    if (!product) return 0;
+    const base = Number(product.currentStock || 0);
+    const restored = effectiveStockMap.get(productId) || 0;
+    return base + restored;
   };
 
   const validate = () => {
     const errors = {};
 
-    if (!form.customerId) {
-      errors.customerId = "Customer is required";
-    }
+    if (!form.customerId) errors.customerId = "Customer is required";
 
-    if (!form.lines.length) {
-      errors.lines = "At least one invoice line is required";
-    }
+    if (!form.lines.length) errors.lines = "At least one invoice line is required";
 
     const usedProducts = new Set();
 
@@ -189,14 +179,13 @@ export default function SalesInvoiceForm({
       }
 
       if (usedProducts.has(line.productId)) {
-        errors.lines = `Duplicate product found on line ${lineNo}. Use one line per product.`;
+        errors.lines = `Duplicate product on line ${lineNo}. Use one line per product.`;
         return;
       }
 
       usedProducts.add(line.productId);
 
-      const product = productMap.get(line.productId);
-      const availableStock = Number(product?.currentStock || 0);
+      const availableStock = getAvailableStock(line.productId);
       const quantity = Number(line.quantity || 0);
       const salePrice = Number(line.salePrice || 0);
       const lineDiscount = Number(line.discountAmount || 0);
@@ -227,21 +216,17 @@ export default function SalesInvoiceForm({
     });
 
     const invoiceDiscount = Number(form.discountAmount || 0);
-
     if (Number.isNaN(invoiceDiscount) || invoiceDiscount < 0) {
       errors.discountAmount = "Invoice discount must be zero or greater";
     }
-
     if (invoiceDiscount > totals.subtotal) {
       errors.discountAmount = "Invoice discount cannot exceed subtotal";
     }
 
     const paidAmount = Number(form.paidAmount || 0);
-
     if (Number.isNaN(paidAmount) || paidAmount < 0) {
       errors.paidAmount = "Paid amount must be zero or greater";
     }
-
     if (paidAmount > totals.totalAmount) {
       errors.paidAmount = "Paid amount cannot be greater than total amount";
     }
@@ -251,22 +236,16 @@ export default function SalesInvoiceForm({
     }
 
     setFormErrors(errors);
-
     return Object.keys(errors).length === 0;
   };
 
   const resetForm = () => {
-    setForm({
-      ...initialForm,
-      lines: [createEmptyLine()],
-    });
-
+    setForm(buildInitialForm(null));
     setFormErrors({});
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (!validate()) return;
 
     const payload = {
@@ -282,8 +261,10 @@ export default function SalesInvoiceForm({
       })),
     };
 
-    if (form.invoiceDate) {
-      payload.invoiceDate = form.invoiceDate;
+    if (form.invoiceDate) payload.invoiceDate = form.invoiceDate;
+
+    if (isEditMode) {
+      payload.id = initialData.id;
     }
 
     await onSubmit(payload, resetForm);
@@ -299,12 +280,12 @@ export default function SalesInvoiceForm({
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <p className="text-sm font-medium text-slate-900">
-          Create sales invoice
+          {isEditMode ? "Edit sales invoice" : "Create sales invoice"}
         </p>
         <p className="mt-1 text-xs leading-5 text-slate-500">
-          Select customer, add finished product lines, set sale prices, enter
-          payment, and post the invoice. The backend will decrease product stock,
-          update customer balance, and create accounting entries.
+          {isEditMode
+            ? "Update lines, prices, or payment. Stock and accounting entries will be reversed and reapplied."
+            : "Select customer, add finished product lines, set sale prices, enter payment, and post the invoice."}
         </p>
       </div>
 
@@ -316,9 +297,9 @@ export default function SalesInvoiceForm({
           options={customers}
           loading={customersLoading}
           placeholder="Select customer"
-          getOptionValue={(customer) => customer.id}
-          getOptionLabel={(customer) => customer.customerCode || customer.name}
-          getOptionDescription={(customer) => customer.name}
+          getOptionValue={(c) => c.id}
+          getOptionLabel={(c) => c.customerCode || c.name}
+          getOptionDescription={(c) => c.name}
           error={formErrors.customerId}
           disabled={submitting}
         />
@@ -327,7 +308,7 @@ export default function SalesInvoiceForm({
           label="Invoice Date"
           type="date"
           value={form.invoiceDate}
-          onChange={(event) => updateField("invoiceDate", event.target.value)}
+          onChange={(e) => updateField("invoiceDate", e.target.value)}
           disabled={submitting}
         />
       </div>
@@ -337,22 +318,15 @@ export default function SalesInvoiceForm({
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Selected Customer
           </p>
-
           <div className="mt-2 grid gap-3 md:grid-cols-3">
             <div>
               <p className="text-xs text-slate-500">Name</p>
-              <p className="text-sm font-medium text-slate-950">
-                {selectedCustomer.name}
-              </p>
+              <p className="text-sm font-medium text-slate-950">{selectedCustomer.name}</p>
             </div>
-
             <div>
               <p className="text-xs text-slate-500">Phone</p>
-              <p className="text-sm font-medium text-slate-950">
-                {selectedCustomer.phone || "-"}
-              </p>
+              <p className="text-sm font-medium text-slate-950">{selectedCustomer.phone || "-"}</p>
             </div>
-
             <div>
               <p className="text-xs text-slate-500">Current Receivable</p>
               <p className="text-sm font-semibold text-slate-950">
@@ -366,15 +340,11 @@ export default function SalesInvoiceForm({
       <div className="rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-950">
-              Invoice Lines
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-950">Invoice Lines</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Add each finished product once with quantity, sale price, and
-              optional line discount.
+              Add each finished product once with quantity, sale price, and optional line discount.
             </p>
           </div>
-
           <Button type="button" variant="secondary" size="sm" onClick={addLine}>
             <Plus size={15} />
             Add Line
@@ -403,13 +373,10 @@ export default function SalesInvoiceForm({
             const salePrice = Number(line.salePrice || 0);
             const discountAmount = Number(line.discountAmount || 0);
             const grossAmount =
-              Number.isNaN(quantity) || Number.isNaN(salePrice)
-                ? 0
-                : quantity * salePrice;
+              Number.isNaN(quantity) || Number.isNaN(salePrice) ? 0 : quantity * salePrice;
             const lineTotal = Math.max(grossAmount - discountAmount, 0);
-            const availableStock = Number(product?.currentStock || 0);
-            const overStock =
-              product && !Number.isNaN(quantity) && quantity > availableStock;
+            const availableStock = getAvailableStock(line.productId);
+            const overStock = product && !Number.isNaN(quantity) && quantity > availableStock;
 
             return (
               <div
@@ -439,9 +406,7 @@ export default function SalesInvoiceForm({
                   min="0"
                   step="0.001"
                   value={line.quantity}
-                  onChange={(event) =>
-                    updateLine(line.rowId, "quantity", event.target.value)
-                  }
+                  onChange={(e) => updateLine(line.rowId, "quantity", e.target.value)}
                   inputClassName={overStock ? "border-red-300" : undefined}
                   disabled={submitting}
                 />
@@ -452,9 +417,7 @@ export default function SalesInvoiceForm({
                   min="0"
                   step="0.01"
                   value={line.salePrice}
-                  onChange={(event) =>
-                    updateLine(line.rowId, "salePrice", event.target.value)
-                  }
+                  onChange={(e) => updateLine(line.rowId, "salePrice", e.target.value)}
                   disabled={submitting}
                 />
 
@@ -464,23 +427,14 @@ export default function SalesInvoiceForm({
                   min="0"
                   step="0.01"
                   value={line.discountAmount}
-                  onChange={(event) =>
-                    updateLine(
-                      line.rowId,
-                      "discountAmount",
-                      event.target.value
-                    )
-                  }
+                  onChange={(e) => updateLine(line.rowId, "discountAmount", e.target.value)}
                   disabled={submitting}
                 />
 
                 <div>
                   {index === 0 ? (
-                    <p className="mb-1.5 text-xs font-medium text-slate-600">
-                      Total
-                    </p>
+                    <p className="mb-1.5 text-xs font-medium text-slate-600">Total</p>
                   ) : null}
-
                   <div className="flex h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-950">
                     {formatMoney(lineTotal)}
                   </div>
@@ -500,23 +454,17 @@ export default function SalesInvoiceForm({
                 {product ? (
                   <div
                     className={`rounded-xl px-3 py-2 text-xs xl:col-span-6 ${
-                      overStock
-                        ? "bg-red-50 text-red-700"
-                        : "bg-slate-50 text-slate-500"
+                      overStock ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-500"
                     }`}
                   >
                     Available stock:{" "}
                     <span className="font-medium">
-                      {formatQty(product.currentStock)} {product.unit?.code || ""}
+                      {formatQty(availableStock)} {product.unit?.code || ""}
                     </span>{" "}
                     • Standard price:{" "}
-                    <span className="font-medium">
-                      {formatMoney(product.standardPrice)}
-                    </span>
+                    <span className="font-medium">{formatMoney(product.standardPrice)}</span>
                     {overStock ? (
-                      <span className="ml-1 font-semibold">
-                        • Quantity exceeds available stock
-                      </span>
+                      <span className="ml-1 font-semibold">• Quantity exceeds available stock</span>
                     ) : null}
                   </div>
                 ) : null}
@@ -530,23 +478,19 @@ export default function SalesInvoiceForm({
         <Textarea
           label="Remarks"
           value={form.remarks}
-          onChange={(event) => updateField("remarks", event.target.value)}
+          onChange={(e) => updateField("remarks", e.target.value)}
           placeholder="Optional invoice remarks..."
           error={formErrors.remarks}
           disabled={submitting}
         />
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-semibold text-slate-950">
-            Invoice Summary
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-950">Invoice Summary</h3>
 
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between rounded-xl bg-white px-3 py-3 text-sm">
               <span className="text-slate-500">Subtotal</span>
-              <span className="font-semibold text-slate-950">
-                {formatMoney(totals.subtotal)}
-              </span>
+              <span className="font-semibold text-slate-950">{formatMoney(totals.subtotal)}</span>
             </div>
 
             <Input
@@ -555,18 +499,14 @@ export default function SalesInvoiceForm({
               min="0"
               step="0.01"
               value={form.discountAmount}
-              onChange={(event) =>
-                updateField("discountAmount", event.target.value)
-              }
+              onChange={(e) => updateField("discountAmount", e.target.value)}
               error={formErrors.discountAmount}
               disabled={submitting}
             />
 
             <div className="flex items-center justify-between rounded-xl bg-white px-3 py-3 text-sm">
               <span className="text-slate-500">Total Amount</span>
-              <span className="font-semibold text-slate-950">
-                {formatMoney(totals.totalAmount)}
-              </span>
+              <span className="font-semibold text-slate-950">{formatMoney(totals.totalAmount)}</span>
             </div>
 
             <Input
@@ -575,7 +515,7 @@ export default function SalesInvoiceForm({
               min="0"
               step="0.01"
               value={form.paidAmount}
-              onChange={(event) => updateField("paidAmount", event.target.value)}
+              onChange={(e) => updateField("paidAmount", e.target.value)}
               error={formErrors.paidAmount}
               disabled={submitting}
             />
@@ -590,30 +530,14 @@ export default function SalesInvoiceForm({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-        <p className="text-xs leading-5 text-blue-800">
-          After posting, the invoice becomes a business transaction. Corrections
-          should be handled later through return, credit note, or reversal flows
-          instead of directly editing posted invoice data.
-        </p>
-      </div>
-
       <div className="flex items-center justify-end gap-3 pt-2">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-          disabled={submitting}
-        >
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
 
-        <Button
-          type="submit"
-          disabled={submitting || customersLoading || productsLoading}
-        >
+        <Button type="submit" disabled={submitting || customersLoading || productsLoading}>
           {submitting ? <Loader2 size={16} className="animate-spin" /> : null}
-          Post Sales Invoice
+          {isEditMode ? "Update Invoice" : "Post Invoice"}
         </Button>
       </div>
     </form>

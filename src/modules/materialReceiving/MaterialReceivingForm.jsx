@@ -8,11 +8,14 @@ import Textarea from "@/components/ui/Textarea";
 import LookupSelect from "@/components/ui/LookupSelect";
 import { formatMoney, formatQty } from "@/lib/format";
 
+const BAG_TO_KG = 50;
+
 const createEmptyLine = () => ({
   rowId: crypto.randomUUID(),
   rawMaterialId: "",
-  quantity: "1",
-  rate: "0",
+  inputMode: "KG",  // "KG" | "BAG"
+  quantity: "1",    // always in the selected inputMode
+  rate: "0",        // always per KG
 });
 
 const initialForm = {
@@ -37,105 +40,104 @@ export default function MaterialReceivingForm({
   const [formErrors, setFormErrors] = useState({});
 
   const selectedVendor = useMemo(() => {
-    return vendors.find((vendor) => vendor.id === form.vendorId);
+    return vendors.find((v) => v.id === form.vendorId);
   }, [vendors, form.vendorId]);
 
   const rawMaterialMap = useMemo(() => {
     const map = new Map();
-
-    rawMaterials.forEach((material) => {
-      map.set(material.id, material);
-    });
-
+    rawMaterials.forEach((m) => map.set(m.id, m));
     return map;
   }, [rawMaterials]);
 
+  // Convert entered quantity to KG based on input mode
+  const toKg = (quantity, inputMode) => {
+    const qty = Number(quantity || 0);
+    return inputMode === "BAG" ? qty * BAG_TO_KG : qty;
+  };
+
   const totals = useMemo(() => {
     const subtotal = form.lines.reduce((sum, line) => {
-      const quantity = Number(line.quantity || 0);
+      const kgQty = toKg(line.quantity, line.inputMode);
       const rate = Number(line.rate || 0);
-
-      if (Number.isNaN(quantity) || Number.isNaN(rate)) return sum;
-
-      return sum + quantity * rate;
+      if (Number.isNaN(kgQty) || Number.isNaN(rate)) return sum;
+      return sum + kgQty * rate;
     }, 0);
 
     const paidAmount = Number(form.paidAmount || 0);
-    const safePaidAmount = Number.isNaN(paidAmount) ? 0 : paidAmount;
+    const safePaid = Number.isNaN(paidAmount) ? 0 : paidAmount;
 
     return {
       subtotal,
-      paidAmount: safePaidAmount,
-      balanceAmount: Math.max(subtotal - safePaidAmount, 0),
+      paidAmount: safePaid,
+      balanceAmount: Math.max(subtotal - safePaid, 0),
     };
   }, [form.lines, form.paidAmount]);
 
   const updateField = (field, value) => {
-    setForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-
-    setFormErrors((prev) => ({
-      ...prev,
-      [field]: "",
-    }));
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setFormErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
   const updateLine = (rowId, field, value) => {
     setForm((prev) => ({
       ...prev,
       lines: prev.lines.map((line) =>
+        line.rowId === rowId ? { ...line, [field]: value } : line
+      ),
+    }));
+    setFormErrors((prev) => ({ ...prev, lines: "" }));
+  };
+
+  const handleMaterialChange = (rowId, rawMaterialId) => {
+    const material = rawMaterialMap.get(rawMaterialId);
+    setForm((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line) =>
         line.rowId === rowId
           ? {
               ...line,
-              [field]: value,
+              rawMaterialId,
+              // Pre-fill rate from average cost if available
+              rate:
+                material && Number(material.averageCost) > 0
+                  ? String(Number(material.averageCost).toFixed(4))
+                  : line.rate,
             }
           : line
       ),
     }));
+    setFormErrors((prev) => ({ ...prev, lines: "" }));
+  };
 
-    setFormErrors((prev) => ({
+  const toggleInputMode = (rowId, mode) => {
+    setForm((prev) => ({
       ...prev,
-      lines: "",
+      lines: prev.lines.map((line) =>
+        line.rowId === rowId
+          ? { ...line, inputMode: mode, quantity: "1" }
+          : line
+      ),
     }));
   };
 
   const addLine = () => {
-    setForm((prev) => ({
-      ...prev,
-      lines: [...prev.lines, createEmptyLine()],
-    }));
-
-    setFormErrors((prev) => ({
-      ...prev,
-      lines: "",
-    }));
+    setForm((prev) => ({ ...prev, lines: [...prev.lines, createEmptyLine()] }));
+    setFormErrors((prev) => ({ ...prev, lines: "" }));
   };
 
   const removeLine = (rowId) => {
     setForm((prev) => {
-      if (prev.lines.length === 1) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        lines: prev.lines.filter((line) => line.rowId !== rowId),
-      };
+      if (prev.lines.length === 1) return prev;
+      return { ...prev, lines: prev.lines.filter((l) => l.rowId !== rowId) };
     });
   };
 
   const validate = () => {
     const errors = {};
 
-    if (!form.vendorId) {
-      errors.vendorId = "Vendor is required";
-    }
+    if (!form.vendorId) errors.vendorId = "Vendor is required";
 
-    if (!form.lines.length) {
-      errors.lines = "At least one line is required";
-    }
+    if (!form.lines.length) errors.lines = "At least one line is required";
 
     const usedMaterials = new Set();
 
@@ -148,16 +150,16 @@ export default function MaterialReceivingForm({
       }
 
       if (usedMaterials.has(line.rawMaterialId)) {
-        errors.lines = `Duplicate raw material found on line ${lineNo}. Use one line per material.`;
+        errors.lines = `Duplicate raw material on line ${lineNo}. Use one line per material.`;
         return;
       }
 
       usedMaterials.add(line.rawMaterialId);
 
-      const quantity = Number(line.quantity || 0);
+      const qty = Number(line.quantity || 0);
       const rate = Number(line.rate || 0);
 
-      if (Number.isNaN(quantity) || quantity <= 0) {
+      if (Number.isNaN(qty) || qty <= 0) {
         errors.lines = `Quantity must be greater than 0 on line ${lineNo}`;
         return;
       }
@@ -182,21 +184,16 @@ export default function MaterialReceivingForm({
     }
 
     setFormErrors(errors);
-
     return Object.keys(errors).length === 0;
   };
 
   const resetForm = () => {
-    setForm({
-      ...initialForm,
-      lines: [createEmptyLine()],
-    });
+    setForm({ ...initialForm, lines: [createEmptyLine()] });
     setFormErrors({});
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (!validate()) return;
 
     const payload = {
@@ -205,14 +202,13 @@ export default function MaterialReceivingForm({
       remarks: form.remarks.trim() || null,
       lines: form.lines.map((line) => ({
         rawMaterialId: line.rawMaterialId,
-        quantity: Number(line.quantity),
+        // Always send quantity in KG to backend
+        quantity: toKg(line.quantity, line.inputMode),
         rate: Number(line.rate),
       })),
     };
 
-    if (form.receiptDate) {
-      payload.receiptDate = form.receiptDate;
-    }
+    if (form.receiptDate) payload.receiptDate = form.receiptDate;
 
     await onSubmit(payload, resetForm);
   };
@@ -226,13 +222,10 @@ export default function MaterialReceivingForm({
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-sm font-medium text-slate-900">
-          Post material receiving
-        </p>
+        <p className="text-sm font-medium text-slate-900">Post material receiving</p>
         <p className="mt-1 text-xs leading-5 text-slate-500">
-          Select the vendor, add raw material lines, enter quantity and rate,
-          then post the receipt. The backend will update stock, vendor balance,
-          inventory movement, ledger, and daybook in one transaction.
+          Select the vendor, add raw material lines with quantity and rate, then post the receipt.
+          You can enter quantity in KG or Bags — bags are automatically converted to KG (1 bag = {BAG_TO_KG} kg).
         </p>
       </div>
 
@@ -244,9 +237,9 @@ export default function MaterialReceivingForm({
           options={vendors}
           loading={vendorsLoading}
           placeholder="Select vendor"
-          getOptionValue={(vendor) => vendor.id}
-          getOptionLabel={(vendor) => vendor.vendorCode || vendor.name}
-          getOptionDescription={(vendor) => vendor.name}
+          getOptionValue={(v) => v.id}
+          getOptionLabel={(v) => v.vendorCode || v.name}
+          getOptionDescription={(v) => v.name}
           error={formErrors.vendorId}
           disabled={submitting}
         />
@@ -255,7 +248,7 @@ export default function MaterialReceivingForm({
           label="Receipt Date"
           type="date"
           value={form.receiptDate}
-          onChange={(event) => updateField("receiptDate", event.target.value)}
+          onChange={(e) => updateField("receiptDate", e.target.value)}
           disabled={submitting}
         />
       </div>
@@ -268,18 +261,12 @@ export default function MaterialReceivingForm({
           <div className="mt-2 grid gap-3 md:grid-cols-3">
             <div>
               <p className="text-xs text-slate-500">Name</p>
-              <p className="text-sm font-medium text-slate-950">
-                {selectedVendor.name}
-              </p>
+              <p className="text-sm font-medium text-slate-950">{selectedVendor.name}</p>
             </div>
-
             <div>
               <p className="text-xs text-slate-500">Phone</p>
-              <p className="text-sm font-medium text-slate-950">
-                {selectedVendor.phone || "-"}
-              </p>
+              <p className="text-sm font-medium text-slate-950">{selectedVendor.phone || "-"}</p>
             </div>
-
             <div>
               <p className="text-xs text-slate-500">Current Payable</p>
               <p className="text-sm font-semibold text-slate-950">
@@ -293,15 +280,11 @@ export default function MaterialReceivingForm({
       <div className="rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-950">
-              Receipt Lines
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-950">Receipt Lines</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Add each raw material once with received quantity and purchase
-              rate.
+              Add each raw material with received quantity and rate per KG.
             </p>
           </div>
-
           <Button type="button" variant="secondary" size="sm" onClick={addLine}>
             <Plus size={15} />
             Add Line
@@ -314,105 +297,133 @@ export default function MaterialReceivingForm({
           </div>
         ) : null}
 
-        <div className="hidden grid-cols-[1.4fr_120px_120px_120px_52px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
-          <div>Raw Material</div>
-          <div>Quantity</div>
-          <div>Rate</div>
-          <div>Line Total</div>
-          <div />
-        </div>
-
         <div className="divide-y divide-slate-100">
           {form.lines.map((line, index) => {
             const material = rawMaterialMap.get(line.rawMaterialId);
-            const quantity = Number(line.quantity || 0);
+            const kgQty = toKg(line.quantity, line.inputMode);
             const rate = Number(line.rate || 0);
-            const lineTotal =
-              Number.isNaN(quantity) || Number.isNaN(rate)
-                ? 0
-                : quantity * rate;
+            const lineTotal = Number.isNaN(kgQty) || Number.isNaN(rate) ? 0 : kgQty * rate;
+            const isBagMode = line.inputMode === "BAG";
 
             return (
-              <div
-                key={line.rowId}
-                className="grid gap-3 p-4 lg:grid-cols-[1.4fr_120px_120px_120px_52px] lg:items-end"
-              >
-                <LookupSelect
-                  label={index === 0 ? "Raw Material" : undefined}
-                  value={line.rawMaterialId}
-                  onChange={(value) =>
-                    updateLine(line.rowId, "rawMaterialId", value)
-                  }
-                  options={rawMaterials}
-                  loading={rawMaterialsLoading}
-                  placeholder="Select material"
-                  getOptionValue={(item) => item.id}
-                  getOptionLabel={(item) => item.materialCode || item.name}
-                  getOptionDescription={(item) =>
-                    `${item.name} • Stock: ${formatQty(item.currentStock)} ${
-                      item.unit?.code || ""
-                    }`
-                  }
-                  disabled={submitting}
-                />
+              <div key={line.rowId} className="space-y-3 p-4">
+                {/* Material selector + unit toggle */}
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+                  <LookupSelect
+                    label={index === 0 ? "Raw Material" : undefined}
+                    value={line.rawMaterialId}
+                    onChange={(value) => handleMaterialChange(line.rowId, value)}
+                    options={rawMaterials}
+                    loading={rawMaterialsLoading}
+                    placeholder="Select material"
+                    getOptionValue={(item) => item.id}
+                    getOptionLabel={(item) => item.materialCode || item.name}
+                    getOptionDescription={(item) =>
+                      `${item.name} • Stock: ${formatQty(item.currentStock)} ${
+                        item.unit?.code || ""
+                      } • Avg cost: ${formatMoney(item.averageCost)}`
+                    }
+                    disabled={submitting}
+                  />
 
-                <Input
-                  label={index === 0 ? "Qty" : undefined}
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={line.quantity}
-                  onChange={(event) =>
-                    updateLine(line.rowId, "quantity", event.target.value)
-                  }
-                  disabled={submitting}
-                />
-
-                <Input
-                  label={index === 0 ? "Rate" : undefined}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={line.rate}
-                  onChange={(event) =>
-                    updateLine(line.rowId, "rate", event.target.value)
-                  }
-                  disabled={submitting}
-                />
-
-                <div>
-                  {index === 0 ? (
-                    <p className="mb-1.5 text-xs font-medium text-slate-600">
-                      Total
-                    </p>
-                  ) : null}
-
-                  <div className="flex h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-950">
-                    {formatMoney(lineTotal)}
+                  {/* Unit mode toggle */}
+                  <div>
+                    {index === 0 ? (
+                      <p className="mb-1.5 text-xs font-medium text-slate-600">Unit</p>
+                    ) : null}
+                    <div className="flex h-10 overflow-hidden rounded-xl border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => toggleInputMode(line.rowId, "KG")}
+                        disabled={submitting}
+                        className={`flex-1 px-3 text-xs font-semibold transition-colors ${
+                          !isBagMode
+                            ? "bg-slate-950 text-white"
+                            : "bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                      >
+                        KG
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleInputMode(line.rowId, "BAG")}
+                        disabled={submitting}
+                        className={`flex-1 border-l border-slate-200 px-3 text-xs font-semibold transition-colors ${
+                          isBagMode
+                            ? "bg-slate-950 text-white"
+                            : "bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                      >
+                        BAG
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => removeLine(line.rowId)}
-                  disabled={submitting || form.lines.length === 1}
-                >
-                  <Trash2 size={16} />
-                </Button>
+                {/* Quantity, Rate, Total, Remove */}
+                <div className="grid items-end gap-3 sm:grid-cols-[120px_130px_1fr_52px]">
+                  <div>
+                    <Input
+                      label={isBagMode ? "Qty (Bags)" : "Qty (KG)"}
+                      type="number"
+                      min="0"
+                      step={isBagMode ? "1" : "0.001"}
+                      value={line.quantity}
+                      onChange={(e) => updateLine(line.rowId, "quantity", e.target.value)}
+                      disabled={submitting}
+                    />
+                    {isBagMode && Number(line.quantity) > 0 ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        = {formatQty(kgQty)} KG
+                      </p>
+                    ) : null}
+                  </div>
 
+                  <Input
+                    label="Rate / KG"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={line.rate}
+                    onChange={(e) => updateLine(line.rowId, "rate", e.target.value)}
+                    disabled={submitting}
+                  />
+
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-slate-600">Line Total</p>
+                    <div className="flex h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-950">
+                      {formatMoney(lineTotal)}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => removeLine(line.rowId)}
+                    disabled={submitting || form.lines.length === 1}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+
+                {/* Material info hint */}
                 {material ? (
-                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500 lg:col-span-5">
+                  <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
                     Current stock:{" "}
                     <span className="font-medium text-slate-700">
                       {formatQty(material.currentStock)} {material.unit?.code || ""}
-                    </span>{" "}
-                    • Average cost:{" "}
-                    <span className="font-medium text-slate-700">
-                      {formatMoney(material.averageCost)}
                     </span>
+                    {" "}• Average cost:{" "}
+                    <span className="font-medium text-slate-700">
+                      {formatMoney(material.averageCost)} / KG
+                    </span>
+                    {isBagMode ? (
+                      <span className="ml-2 font-medium text-blue-700">
+                        • 1 bag = {BAG_TO_KG} KG
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -425,23 +436,19 @@ export default function MaterialReceivingForm({
         <Textarea
           label="Remarks"
           value={form.remarks}
-          onChange={(event) => updateField("remarks", event.target.value)}
+          onChange={(e) => updateField("remarks", e.target.value)}
           placeholder="Optional receipt remarks..."
           error={formErrors.remarks}
           disabled={submitting}
         />
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-semibold text-slate-950">
-            Receipt Summary
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-950">Receipt Summary</h3>
 
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Subtotal</span>
-              <span className="font-semibold text-slate-950">
-                {formatMoney(totals.subtotal)}
-              </span>
+              <span className="font-semibold text-slate-950">{formatMoney(totals.subtotal)}</span>
             </div>
 
             <Input
@@ -450,7 +457,7 @@ export default function MaterialReceivingForm({
               min="0"
               step="0.01"
               value={form.paidAmount}
-              onChange={(event) => updateField("paidAmount", event.target.value)}
+              onChange={(e) => updateField("paidAmount", e.target.value)}
               error={formErrors.paidAmount}
               disabled={submitting}
             />
@@ -465,21 +472,8 @@ export default function MaterialReceivingForm({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-        <p className="text-xs leading-5 text-blue-800">
-          After posting, this receipt cannot be treated like a normal master
-          record because it affects inventory and accounts. Any correction later
-          should be done through a proper adjustment/reversal flow.
-        </p>
-      </div>
-
       <div className="flex items-center justify-end gap-3 pt-2">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-          disabled={submitting}
-        >
+        <Button type="button" variant="secondary" onClick={onCancel} disabled={submitting}>
           Cancel
         </Button>
 

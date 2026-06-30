@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
+  BookOpen,
   Edit,
   Plus,
   RefreshCw,
@@ -33,6 +35,7 @@ function getStatusBadge(status) {
 }
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -197,6 +200,17 @@ export default function CustomersPage() {
       header: "Actions",
       render: (row) => (
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              router.push(`/dashboard/ledgers?customerId=${row.id}`)
+            }
+          >
+            <BookOpen size={14} />
+            Ledger
+          </Button>
+
           <Button
             variant="secondary"
             size="sm"

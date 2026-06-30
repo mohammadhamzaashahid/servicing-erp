@@ -47,3 +47,31 @@ export function useCreateSalesInvoice() {
     },
   });
 }
+
+export function useUpdateSalesInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: salesApi.update,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: salesKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: salesKeys.detail(data?.id) });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: customerKeys.lists() });
+    },
+  });
+}
+
+export function useDeleteSalesInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: salesApi.remove,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: salesKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: customerKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["ledgers"] });
+    },
+  });
+}

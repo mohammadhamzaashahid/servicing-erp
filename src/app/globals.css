@@ -43,3 +43,16 @@ textarea {
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  body {
+    background: #ffffff;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

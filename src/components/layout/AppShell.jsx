@@ -9,7 +9,7 @@ export default function AppShell({ children }) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block">
+      <div className="hidden print:hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block">
         <Sidebar />
       </div>
 
@@ -27,10 +27,12 @@ export default function AppShell({ children }) {
         </div>
       ) : null}
 
-      <div className="lg:pl-72">
-        <Topbar onMenuClick={() => setMobileOpen(true)} />
+      <div className="print:pl-0 lg:pl-72">
+        <div className="print:hidden">
+          <Topbar onMenuClick={() => setMobileOpen(true)} />
+        </div>
 
-        <main className="mx-auto w-full max-w-[1600px] px-4 py-5 md:px-6 lg:px-8">
+        <main className="mx-auto w-full max-w-[1600px] px-4 py-5 print:max-w-none print:p-0 md:px-6 lg:px-8">
           {children}
         </main>
       </div>
