@@ -23,7 +23,7 @@ export default function Sidebar({ mobile = false, onNavigate }) {
 
         <div>
           <h1 className="text-sm font-semibold leading-5 text-slate-950">
-            Servicing ERP
+         Saroya Chemicals
           </h1>
           <p className="text-xs text-slate-500">Admin Operations Portal</p>
         </div>

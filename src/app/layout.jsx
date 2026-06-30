@@ -2,8 +2,8 @@ import "./globals.css";
 import Providers from "./providers";
 
 export const metadata = {
-  title: "Servicing ERP",
-  description: "Micro ERP portal for inventory, production, sales, and accounting",
+  title: "Saroya Chemicals",
+  description: "Saroya Chemicals portal for inventory, production, sales, and accounting",
 };
 
 export default function RootLayout({ children }) {

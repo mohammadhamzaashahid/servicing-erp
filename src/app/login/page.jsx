@@ -57,7 +57,7 @@ export default function LoginPage() {
             <Boxes size={22} />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">Servicing ERP</h1>
+            <h1 className="text-lg font-semibold">Saroya Chemicals</h1>
             <p className="text-sm text-slate-400">Business Operations Portal</p>
           </div>
         </div>
@@ -89,7 +89,7 @@ export default function LoginPage() {
               <Boxes size={22} />
             </div>
             <h1 className="text-xl font-semibold text-slate-950">
-              Servicing ERP
+              Saroya Chemicals
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Business Operations Portal

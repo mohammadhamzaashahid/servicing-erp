@@ -17,4 +17,12 @@ export const ledgerApi = {
   recordCustomerPayment: async (customerId, payload) => {
     return api.post(`/ledgers/customers/${customerId}/payments`, payload);
   },
+
+  getVendorStatement: async (vendorId, params = {}) => {
+    return api.get(`/ledgers/vendors/${vendorId}${buildQuery(params)}`);
+  },
+
+  recordVendorPayment: async (vendorId, payload) => {
+    return api.post(`/ledgers/vendors/${vendorId}/payments`, payload);
+  },
 };

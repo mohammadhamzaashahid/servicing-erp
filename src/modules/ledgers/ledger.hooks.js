@@ -17,6 +17,12 @@ export const ledgerKeys = {
     customerId,
     params,
   ],
+  vendorStatements: () => [...ledgerKeys.all, "vendor-statements"],
+  vendorStatement: (vendorId, params) => [
+    ...ledgerKeys.vendorStatements(),
+    vendorId,
+    params,
+  ],
 };
 
 export function useLedgerEntries(params = {}) {
@@ -53,6 +59,28 @@ export function useRecordCustomerPayment() {
       });
       queryClient.invalidateQueries({ queryKey: customerKeys.lists() });
       queryClient.invalidateQueries({ queryKey: salesKeys.lists() });
+    },
+  });
+}
+
+export function useVendorStatement(vendorId, params = {}) {
+  return useQuery({
+    queryKey: ledgerKeys.vendorStatement(vendorId, params),
+    queryFn: () => ledgerApi.getVendorStatement(vendorId, params),
+    enabled: Boolean(vendorId),
+  });
+}
+
+export function useRecordVendorPayment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ vendorId, payload }) =>
+      ledgerApi.recordVendorPayment(vendorId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ledgerKeys.vendorStatements(),
+      });
     },
   });
 }
