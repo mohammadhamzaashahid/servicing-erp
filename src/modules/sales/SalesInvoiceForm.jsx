@@ -20,7 +20,7 @@ function buildInitialForm(initialData) {
   if (!initialData) {
     return {
       customerId: "",
-      invoiceDate: "",
+      invoiceDate: new Date().toLocaleDateString("en-CA"),
       discountAmount: "0",
       paidAmount: "0",
       remarks: "",

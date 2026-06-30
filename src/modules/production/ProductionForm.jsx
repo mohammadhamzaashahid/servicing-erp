@@ -20,12 +20,12 @@ const createEmptyOutputLine = () => ({
   quantity: "1",
 });
 
-const initialForm = {
-  productionDate: "",
+const buildInitialForm = () => ({
+  productionDate: new Date().toLocaleDateString("en-CA"),
   remarks: "",
   consumptions: [createEmptyConsumptionLine()],
   outputs: [createEmptyOutputLine()],
-};
+});
 
 export default function ProductionForm({
   rawMaterials = [],
@@ -37,7 +37,7 @@ export default function ProductionForm({
   onSubmit,
   onCancel,
 }) {
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(buildInitialForm);
   const [formErrors, setFormErrors] = useState({});
 
   const rawMaterialMap = useMemo(() => {
@@ -259,11 +259,7 @@ export default function ProductionForm({
   };
 
   const resetForm = () => {
-    setForm({
-      ...initialForm,
-      consumptions: [createEmptyConsumptionLine()],
-      outputs: [createEmptyOutputLine()],
-    });
+    setForm(buildInitialForm());
 
     setFormErrors({});
   };

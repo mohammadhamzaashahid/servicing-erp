@@ -18,13 +18,13 @@ const createEmptyLine = () => ({
   rate: "0",        // always per KG
 });
 
-const initialForm = {
+const buildInitialForm = () => ({
   vendorId: "",
-  receiptDate: "",
+  receiptDate: new Date().toLocaleDateString("en-CA"),
   paidAmount: "0",
   remarks: "",
   lines: [createEmptyLine()],
-};
+});
 
 export default function MaterialReceivingForm({
   vendors = [],
@@ -36,7 +36,7 @@ export default function MaterialReceivingForm({
   onSubmit,
   onCancel,
 }) {
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(buildInitialForm);
   const [formErrors, setFormErrors] = useState({});
 
   const selectedVendor = useMemo(() => {
@@ -188,7 +188,7 @@ export default function MaterialReceivingForm({
   };
 
   const resetForm = () => {
-    setForm({ ...initialForm, lines: [createEmptyLine()] });
+    setForm(buildInitialForm());
     setFormErrors({});
   };
 
