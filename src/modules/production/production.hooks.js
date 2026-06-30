@@ -33,17 +33,22 @@ export function useCreateProductionBatch() {
   return useMutation({
     mutationFn: productionApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: productionKeys.lists(),
-      });
+      queryClient.invalidateQueries({ queryKey: productionKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: rawMaterialKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+    },
+  });
+}
 
-      queryClient.invalidateQueries({
-        queryKey: rawMaterialKeys.lists(),
-      });
+export function useDeleteProductionBatch() {
+  const queryClient = useQueryClient();
 
-      queryClient.invalidateQueries({
-        queryKey: productKeys.lists(),
-      });
+  return useMutation({
+    mutationFn: productionApi.remove,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: productionKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: rawMaterialKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: productKeys.lists() });
     },
   });
 }

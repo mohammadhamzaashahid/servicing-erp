@@ -13,4 +13,8 @@ export const productionApi = {
   create: async (payload) => {
     return api.post("/production", payload);
   },
+
+  remove: async (id) => {
+    return api.delete(`/production/${id}`);
+  },
 };

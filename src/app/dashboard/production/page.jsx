@@ -8,6 +8,7 @@ import {
   Printer,
   RefreshCw,
   Search,
+  Trash2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import DataTable from "@/components/ui/DataTable";
@@ -17,6 +18,7 @@ import Badge from "@/components/ui/Badge";
 import ProductionForm from "@/modules/production/ProductionForm";
 import {
   useCreateProductionBatch,
+  useDeleteProductionBatch,
   useProductionBatches,
 } from "@/modules/production/production.hooks";
 import { useRawMaterials } from "@/modules/rawMaterials/rawMaterial.hooks";
@@ -54,6 +56,7 @@ export default function ProductionPage() {
   });
 
   const createMutation = useCreateProductionBatch();
+  const deleteMutation = useDeleteProductionBatch();
 
   const rows = batchesQuery.data?.data || [];
   const pagination = batchesQuery.data?.pagination;
@@ -90,6 +93,19 @@ export default function ProductionPage() {
   const handleResetSearch = () => {
     setSearch("");
     setAppliedSearch("");
+  };
+
+  const handleDelete = async (batch) => {
+    const confirmed = window.confirm(
+      `Delete production batch "${batch.batchNo}"? This will reverse all stock changes from this batch.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteMutation.mutateAsync(batch.id);
+    } catch (error) {
+      window.alert(error.message || "Unable to delete production batch");
+    }
   };
 
   const handleCreate = async (payload, resetForm) => {
@@ -150,14 +166,25 @@ export default function ProductionPage() {
       key: "actions",
       header: "Actions",
       render: (row) => (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => openDetailDrawer(row)}
-        >
-          <Eye size={14} />
-          View
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => openDetailDrawer(row)}
+          >
+            <Eye size={14} />
+            View
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => handleDelete(row)}
+            disabled={deleteMutation.isPending}
+          >
+            <Trash2 size={14} />
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];

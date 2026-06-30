@@ -33,17 +33,22 @@ export function useCreateMaterialReceipt() {
   return useMutation({
     mutationFn: materialReceivingApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: materialReceivingKeys.lists(),
-      });
+      queryClient.invalidateQueries({ queryKey: materialReceivingKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: rawMaterialKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: vendorKeys.lists() });
+    },
+  });
+}
 
-      queryClient.invalidateQueries({
-        queryKey: rawMaterialKeys.lists(),
-      });
+export function useDeleteMaterialReceipt() {
+  const queryClient = useQueryClient();
 
-      queryClient.invalidateQueries({
-        queryKey: vendorKeys.lists(),
-      });
+  return useMutation({
+    mutationFn: materialReceivingApi.remove,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: materialReceivingKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: rawMaterialKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: vendorKeys.lists() });
     },
   });
 }

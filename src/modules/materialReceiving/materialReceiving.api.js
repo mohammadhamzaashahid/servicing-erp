@@ -13,4 +13,8 @@ export const materialReceivingApi = {
   create: async (payload) => {
     return api.post("/material-receiving", payload);
   },
+
+  remove: async (id) => {
+    return api.delete(`/material-receiving/${id}`);
+  },
 };

@@ -8,6 +8,7 @@ import {
   Printer,
   RefreshCw,
   Search,
+  Trash2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import DataTable from "@/components/ui/DataTable";
@@ -18,6 +19,7 @@ import Badge from "@/components/ui/Badge";
 import MaterialReceivingForm from "@/modules/materialReceiving/MaterialReceivingForm";
 import {
   useCreateMaterialReceipt,
+  useDeleteMaterialReceipt,
   useMaterialReceipts,
 } from "@/modules/materialReceiving/materialReceiving.hooks";
 import { useVendors } from "@/modules/vendors/vendor.hooks";
@@ -73,6 +75,7 @@ export default function MaterialReceivingPage() {
   });
 
   const createMutation = useCreateMaterialReceipt();
+  const deleteMutation = useDeleteMaterialReceipt();
 
   const rows = receiptsQuery.data?.data || [];
   const pagination = receiptsQuery.data?.pagination;
@@ -113,6 +116,20 @@ export default function MaterialReceivingPage() {
     setVendorId("");
     setAppliedSearch("");
     setAppliedVendorId("");
+  };
+
+  const handleDelete = async (receipt) => {
+    const confirmed = window.confirm(
+      `Delete receipt "${receipt.receiptNo}"? This will reverse all stock and accounting entries for this receipt.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteMutation.mutateAsync(receipt.id);
+      if (detailReceipt?.id === receipt.id) setDetailReceipt(null);
+    } catch (error) {
+      window.alert(error.message || "Unable to delete material receipt");
+    }
   };
 
   const handleCreate = async (payload, resetForm) => {
@@ -197,6 +214,15 @@ export default function MaterialReceivingPage() {
           >
             <Eye size={14} />
             View
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => handleDelete(row)}
+            disabled={deleteMutation.isPending}
+          >
+            <Trash2 size={14} />
+            Delete
           </Button>
         </div>
       ),
