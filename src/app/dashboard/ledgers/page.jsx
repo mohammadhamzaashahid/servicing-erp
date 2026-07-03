@@ -47,9 +47,9 @@ function formatVendorSourceType(type) {
   return labels[type] || type || "Transaction";
 }
 
-function formatBalance(value, side) {
+function formatBalance(value) {
   const amount = Math.abs(Number(value || 0));
-  return `${formatMoney(amount)} ${amount > 0 ? side : ""}`.trim();
+  return formatMoney(amount);
 }
 
 function formatRunningBalance(value) {
@@ -280,7 +280,7 @@ function CustomerLedgerPage() {
     }
   };
 
-  const closingSide = summary?.balanceSide || "DR";
+  const closingSide = summary?.balanceSide || "";
 
   return (
     <div className="space-y-5 print:space-y-3 print:bg-white">
@@ -420,10 +420,7 @@ function CustomerLedgerPage() {
           <section className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
             <SummaryCard
               label="Balance B/F"
-              value={formatBalance(
-                summary.openingBalance,
-                Number(summary.openingBalance) >= 0 ? "DR" : "CR"
-              )}
+              value={formatBalance(summary.openingBalance)}
               helper="Balance before this period"
             />
             <SummaryCard
@@ -438,7 +435,7 @@ function CustomerLedgerPage() {
             />
             <SummaryCard
               label={closingSide === "DR" ? "Closing Receivable" : "Customer Advance"}
-              value={formatBalance(summary.closingBalance, closingSide)}
+              value={formatBalance(summary.closingBalance)}
               helper={`${summary.outstandingInvoiceCount} outstanding invoice${
                 summary.outstandingInvoiceCount === 1 ? "" : "s"
               }`}
@@ -466,7 +463,7 @@ function CustomerLedgerPage() {
                 Current account receivable
               </p>
               <p className="mt-1 text-lg font-semibold text-slate-950">
-                {formatMoney(summary.currentBalance)} DR
+                {formatMoney(summary.currentBalance)} 
               </p>
             </div>
           </section>
@@ -496,7 +493,7 @@ function CustomerLedgerPage() {
               Current receivable
             </p>
             <p className="mt-1 text-xl font-semibold text-slate-950">
-              {formatMoney(statement?.customer?.currentBalance)} DR
+              {formatMoney(statement?.customer?.currentBalance)} 
             </p>
             <p className="mt-1 text-xs text-slate-500">
               The receipt will reduce this balance and update outstanding invoices.
@@ -799,10 +796,7 @@ function VendorLedgerPage() {
           <section className="grid gap-0 sm:grid-cols-2 xl:grid-cols-4 print:grid-cols-4">
             <SummaryCard
               label="Balance B/F"
-              value={formatBalance(
-                summary.openingBalance,
-                Number(summary.openingBalance) >= 0 ? "CR" : "DR"
-              )}
+              value={formatBalance(summary.openingBalance)}
               helper="Balance before this period"
             />
             <SummaryCard
@@ -817,7 +811,7 @@ function VendorLedgerPage() {
             />
             <SummaryCard
               label={closingSide === "CR" ? "Closing Payable" : "Vendor Advance"}
-              value={formatBalance(summary.closingBalance, closingSide)}
+              value={formatBalance(summary.closingBalance)}
               helper={`${summary.outstandingReceiptCount} outstanding receipt${
                 summary.outstandingReceiptCount === 1 ? "" : "s"
               }`}
@@ -845,7 +839,7 @@ function VendorLedgerPage() {
                 Current account payable
               </p>
               <p className="mt-1 text-lg font-semibold text-slate-950">
-                {formatMoney(summary.currentBalance)} CR
+                {formatMoney(summary.currentBalance)}
               </p>
             </div>
           </section>
@@ -875,7 +869,7 @@ function VendorLedgerPage() {
               Current payable
             </p>
             <p className="mt-1 text-xl font-semibold text-slate-950">
-              {formatMoney(statement?.vendor?.currentBalance)} CR
+              {formatMoney(statement?.vendor?.currentBalance)}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               The payment will reduce this balance and update outstanding receipts.
