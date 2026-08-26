@@ -1,7 +1,9 @@
 import {
   Boxes,
+  CalendarDays,
   ClipboardList,
   Factory,
+  FileBarChart2,
   Gauge,
   LayoutDashboard,
   Package,
@@ -10,6 +12,7 @@ import {
   ShoppingCart,
   Truck,
   Users,
+  Wallet,
   WalletCards,
 } from "lucide-react";
 
@@ -73,5 +76,20 @@ export const navigationItems = [
     label: "Daybook",
     href: "/dashboard/daybook",
     icon: Gauge,
+  },
+  {
+    label: "Expenses",
+    href: "/dashboard/expenses",
+    icon: Wallet,
+  },
+  {
+    label: "Expense Report",
+    href: "/dashboard/reports/expenses",
+    icon: CalendarDays,
+  },
+  {
+    label: "Income Statement",
+    href: "/dashboard/reports/income-statement",
+    icon: FileBarChart2,
   },
 ];

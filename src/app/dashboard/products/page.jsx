@@ -210,6 +210,11 @@ export default function ProductsPage() {
       ),
     },
     {
+      key: "averageCost",
+      header: "Avg Cost",
+      render: (row) => formatMoney(row.averageCost),
+    },
+    {
       key: "stockStatus",
       header: "Stock",
       render: (row) => getStockBadge(row),
