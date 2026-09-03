@@ -9,6 +9,7 @@ import {
   Package,
   ReceiptText,
   Scale,
+  ShoppingBag,
   ShoppingCart,
   Truck,
   Users,
@@ -51,6 +52,11 @@ export const navigationItems = [
     label: "Material Receiving",
     href: "/dashboard/material-receiving",
     icon: ClipboardList,
+  },
+  {
+    label: "Product Purchasing",
+    href: "/dashboard/product-purchasing",
+    icon: ShoppingBag,
   },
   {
     label: "Production",

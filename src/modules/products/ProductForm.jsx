@@ -12,6 +12,7 @@ const initialForm = {
   unitId: "",
   standardPrice: "0",
   minimumStock: "0",
+  productType: "MANUFACTURED",
   status: "ACTIVE",
 };
 
@@ -30,11 +31,13 @@ export default function ProductForm({
 
   useEffect(() => {
     if (initialValues) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         name: initialValues.name || "",
         unitId: initialValues.unitId || "",
         standardPrice: String(initialValues.standardPrice ?? "0"),
         minimumStock: String(initialValues.minimumStock ?? "0"),
+        productType: initialValues.productType || "MANUFACTURED",
         status: initialValues.status || "ACTIVE",
       });
     } else {
@@ -102,6 +105,7 @@ export default function ProductForm({
       unitId: form.unitId,
       standardPrice: Number(form.standardPrice || 0),
       minimumStock: Number(form.minimumStock || 0),
+      productType: form.productType,
     };
 
     if (mode === "edit") {
@@ -153,6 +157,16 @@ export default function ProductForm({
           error={formErrors.unitId}
           disabled={submitting}
         />
+
+        <Select
+          label="Product Type"
+          value={form.productType}
+          onChange={(event) => updateField("productType", event.target.value)}
+          disabled={submitting}
+        >
+          <option value="MANUFACTURED">Manufactured (from Production)</option>
+          <option value="TRADING">Trading (bought directly, resold as-is)</option>
+        </Select>
 
         <div className="grid gap-4 md:grid-cols-2">
           <Input
@@ -207,8 +221,10 @@ export default function ProductForm({
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
         <p className="text-xs leading-5 text-amber-800">
-          Current stock is system-calculated. It increases from production and
-          decreases from sales invoices.
+          Current stock is system-calculated and decreases from sales
+          invoices. Manufactured products get stock from Production;
+          trading products get stock from Product Purchasing — each product
+          can only receive stock through the flow matching its type.
         </p>
       </div>
 

@@ -33,6 +33,14 @@ function getStatusBadge(status) {
   return <Badge variant="slate">Inactive</Badge>;
 }
 
+function getProductTypeBadge(productType) {
+  if (productType === "TRADING") {
+    return <Badge variant="blue">Trading</Badge>;
+  }
+
+  return <Badge variant="slate">Manufactured</Badge>;
+}
+
 function getStockBadge(row) {
   const currentStock = Number(row.currentStock || 0);
   const minimumStock = Number(row.minimumStock || 0);
@@ -49,6 +57,8 @@ export default function ProductsPage() {
   const [appliedSearch, setAppliedSearch] = useState("");
   const [status, setStatus] = useState("");
   const [appliedStatus, setAppliedStatus] = useState("");
+  const [productType, setProductType] = useState("");
+  const [appliedProductType, setAppliedProductType] = useState("");
   const [lowStock, setLowStock] = useState("");
   const [appliedLowStock, setAppliedLowStock] = useState("");
   const [drawerMode, setDrawerMode] = useState(null);
@@ -61,9 +71,10 @@ export default function ProductsPage() {
       limit: 50,
       search: appliedSearch,
       status: appliedStatus,
+      productType: appliedProductType,
       lowStock: appliedLowStock,
     }),
-    [appliedSearch, appliedStatus, appliedLowStock]
+    [appliedSearch, appliedStatus, appliedProductType, appliedLowStock]
   );
 
   const productsQuery = useProducts(queryParams);
@@ -106,15 +117,18 @@ export default function ProductsPage() {
 
     setAppliedSearch(search.trim());
     setAppliedStatus(status);
+    setAppliedProductType(productType);
     setAppliedLowStock(lowStock);
   };
 
   const handleResetSearch = () => {
     setSearch("");
     setStatus("");
+    setProductType("");
     setLowStock("");
     setAppliedSearch("");
     setAppliedStatus("");
+    setAppliedProductType("");
     setAppliedLowStock("");
   };
 
@@ -215,6 +229,11 @@ export default function ProductsPage() {
       render: (row) => formatMoney(row.averageCost),
     },
     {
+      key: "productType",
+      header: "Type",
+      render: (row) => getProductTypeBadge(row.productType),
+    },
+    {
       key: "stockStatus",
       header: "Stock",
       render: (row) => getStockBadge(row),
@@ -278,8 +297,9 @@ export default function ProductsPage() {
             Products
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            Manage finished goods that are produced from raw materials and sold
-            to customers. Stock updates automatically from production and sales.
+            Manage finished goods sold to customers — manufactured products
+            get stock from Production, trading products (bought directly
+            from the market) get stock from Product Purchasing.
           </p>
         </div>
 
@@ -292,7 +312,7 @@ export default function ProductsPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <form
           onSubmit={handleSearchSubmit}
-          className="grid gap-3 lg:grid-cols-[1fr_190px_190px_auto]"
+          className="grid gap-3 lg:grid-cols-[1fr_170px_170px_170px_auto]"
         >
           <Input
             label="Search products"
@@ -309,6 +329,16 @@ export default function ProductsPage() {
             <option value="">All Statuses</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
+          </Select>
+
+          <Select
+            label="Type"
+            value={productType}
+            onChange={(event) => setProductType(event.target.value)}
+          >
+            <option value="">All Types</option>
+            <option value="MANUFACTURED">Manufactured</option>
+            <option value="TRADING">Trading</option>
           </Select>
 
           <Select

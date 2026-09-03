@@ -53,6 +53,7 @@ export default function ProductionPage() {
     page: 1,
     limit: 100,
     status: "ACTIVE",
+    productType: "MANUFACTURED",
   });
 
   const createMutation = useCreateProductionBatch();
