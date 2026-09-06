@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  MessageSquareText,
   Printer,
   RefreshCw,
   Search,
@@ -58,15 +59,6 @@ function formatRunningBalance(value) {
   return balance < 0 ? `(${formatted})` : formatted;
 }
 
-function formatLedgerDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = String(date.getFullYear()).slice(-2);
-  return `${day}.${month}.${year}`;
-}
-
 function SummaryCard({ label, value, helper }) {
   return (
     <div className="border border-slate-300 bg-white p-3 text-slate-950">
@@ -108,7 +100,13 @@ function LedgerTabs({ activeTab, onChange }) {
   );
 }
 
-function StatementTable({ rows, summary, appliedFilters, formatSourceType }) {
+function StatementTable({
+  rows,
+  summary,
+  appliedFilters,
+  formatSourceType,
+  onViewRemark,
+}) {
   return (
     <section className="overflow-hidden border border-slate-400 bg-white">
       <div className="overflow-x-auto">
@@ -129,7 +127,7 @@ function StatementTable({ rows, summary, appliedFilters, formatSourceType }) {
             {Number(summary.openingBalance) !== 0 ? (
               <tr className="bg-slate-50 font-medium text-slate-700">
                 <td className="border-r border-slate-200 px-3 py-3 text-center">-</td>
-                <td className="border-r border-slate-200 px-3 py-3">{appliedFilters.from ? formatLedgerDate(appliedFilters.from) : "-"}</td>
+                <td className="border-r border-slate-200 px-3 py-3">{appliedFilters.from ? formatDate(appliedFilters.from) : "-"}</td>
                 <td className="border-r border-slate-200 px-4 py-3">Balance brought forward</td>
                 <td className="border-r border-slate-200 px-3 py-3 text-right">-</td>
                 <td className="border-r border-slate-200 px-3 py-3 text-right">-</td>
@@ -147,10 +145,22 @@ function StatementTable({ rows, summary, appliedFilters, formatSourceType }) {
                   {index + 1}
                 </td>
                 <td className="whitespace-nowrap border-r border-slate-200 px-3 py-3">
-                  {formatLedgerDate(row.transactionDate)}
+                  {formatDate(row.transactionDate)}
                 </td>
                 <td className="border-r border-slate-200 px-4 py-3">
-                  <p className="font-medium text-slate-900">{row.description}</p>
+                  <div className="flex items-start gap-1.5">
+                    <p className="font-medium text-slate-900">{row.description}</p>
+                    {row.remarks ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewRemark(row)}
+                        title="View remark"
+                        className="mt-0.5 shrink-0 rounded-full p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 print:hidden"
+                      >
+                        <MessageSquareText size={14} />
+                      </button>
+                    ) : null}
+                  </div>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {row.reference || formatSourceType(row.sourceType)}
                   </p>
@@ -218,6 +228,7 @@ function CustomerLedgerPage() {
     mode: "CASH",
     remarks: "",
   });
+  const [remarkRow, setRemarkRow] = useState(null);
 
   const customersQuery = useCustomers({ page: 1, limit: 100 });
   const customers = customersQuery.data?.data || [];
@@ -447,6 +458,7 @@ function CustomerLedgerPage() {
             summary={summary}
             appliedFilters={appliedFilters}
             formatSourceType={formatCustomerSourceType}
+            onViewRemark={setRemarkRow}
           />
 
           <section className="grid gap-0 sm:grid-cols-2 print:grid-cols-2">
@@ -574,6 +586,35 @@ function CustomerLedgerPage() {
           </div>
         </form>
       </Drawer>
+
+      <Drawer
+        open={Boolean(remarkRow)}
+        title="Payment Remark"
+        description={remarkRow?.reference ? `Reference: ${remarkRow.reference}` : undefined}
+        onClose={() => setRemarkRow(null)}
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Transaction
+            </p>
+            <p className="mt-1 text-sm text-slate-900">{remarkRow?.description}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {formatDate(remarkRow?.transactionDate)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Remark
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              {remarkRow?.remarks}
+            </p>
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 }
@@ -595,6 +636,7 @@ function VendorLedgerPage() {
     mode: "CASH",
     remarks: "",
   });
+  const [remarkRow, setRemarkRow] = useState(null);
 
   const vendorsQuery = useVendors({ page: 1, limit: 100 });
   const vendors = vendorsQuery.data?.data || [];
@@ -823,6 +865,7 @@ function VendorLedgerPage() {
             summary={summary}
             appliedFilters={appliedFilters}
             formatSourceType={formatVendorSourceType}
+            onViewRemark={setRemarkRow}
           />
 
           <section className="grid gap-0 sm:grid-cols-2 print:grid-cols-2">
@@ -949,6 +992,35 @@ function VendorLedgerPage() {
             </Button>
           </div>
         </form>
+      </Drawer>
+
+      <Drawer
+        open={Boolean(remarkRow)}
+        title="Payment Remark"
+        description={remarkRow?.reference ? `Reference: ${remarkRow.reference}` : undefined}
+        onClose={() => setRemarkRow(null)}
+        width="max-w-md"
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Transaction
+            </p>
+            <p className="mt-1 text-sm text-slate-900">{remarkRow?.description}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {formatDate(remarkRow?.transactionDate)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Remark
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              {remarkRow?.remarks}
+            </p>
+          </div>
+        </div>
       </Drawer>
     </div>
   );

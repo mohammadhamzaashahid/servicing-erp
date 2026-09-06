@@ -22,12 +22,10 @@ function todayIso() {
 }
 
 function formatDayHeading(dateKey) {
-  return new Intl.DateTimeFormat("en-PK", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "2-digit",
-  }).format(new Date(`${dateKey}T00:00:00`));
+  const date = new Date(`${dateKey}T00:00:00`);
+  const weekday = new Intl.DateTimeFormat("en-PK", { weekday: "long" }).format(date);
+
+  return `${weekday}, ${formatDate(date)}`;
 }
 
 export default function DailyExpenseReportPage() {
